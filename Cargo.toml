@@ -1,0 +1,27 @@
+[package]
+name = "ggm"
+version = "0.1.0"
+authors = ["Matheus Branco Borella <dark.ryu.550@gmail.com>"]
+edition = "2018"
+build   = "build/mod.rs"
+
+[dependencies]
+log	= "0.4.8"
+
+[features]
+default = ["all"]
+
+# Enable all features.
+all = [ "organya", "usf", "gsf", "psf" ]
+# Support for the Organya files used in Cave Story.
+organya = []
+# Whether the wave table at "build/organya/wavetable.dat" will be built into
+# the target binary. This option exists to prevent possible licensing issues.
+no-organya-builtin-wavetable = []
+# Support for the Ultra Sound Format (Nintendo 64).
+usf = []
+# Support for the Gameboy Sound Format (GameBoy Advance).
+gsf = []
+# Support for the Playstation Sound Format (PlayStation).
+psf = []
+
