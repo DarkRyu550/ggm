@@ -115,7 +115,6 @@ pub fn read<R: Read>(mut r: &mut R) -> std::io::Result<Organya> {
 	/* Load note data. */
 	let mut notes: [Vec<Note>; INSTRUMENTS] = Default::default();
 	
-	use std::io::{Error, ErrorKind};
 	let g_u32 = |r: &mut R| -> std::io::Result<[u8; 4]> 
 		{ let mut n = [0; 4]; r.read_exact(&mut n)?; Ok(n) };
 	let g_u8  = |r: &mut R| -> std::io::Result<[u8; 1]> 

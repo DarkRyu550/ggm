@@ -12,12 +12,15 @@ log	= "0.4.8"
 default = ["all"]
 
 # Enable all features.
-all = [ "organya", "usf", "gsf", "psf" ]
+all = ["organya", "usf", "gsf", "psf"]
 # Support for the Organya files used in Cave Story.
 organya = []
 # Whether the wave table at "build/organya/wavetable.dat" will be built into
 # the target binary. This option exists to prevent possible licensing issues.
 no-organya-builtin-wavetable = []
+# Whether the PixTone effects at "build/organya/pixtone/" will be built into
+# the target binary. Like the last option, this is a licensing utility.
+no-organya-builtin-pixtone = []
 # Support for the Ultra Sound Format (Nintendo 64).
 usf = []
 # Support for the Gameboy Sound Format (GameBoy Advance).

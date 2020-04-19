@@ -1,6 +1,7 @@
 /** Contains the built-in wavetable, if there is one. See `build/organya/mod.rs`
  * for more information on what this means. */
-include!(concat!(env!("OUT_DIR"), "/organya/wavetable.rs"));
+pub const WAVETABLE: Option<&'static [u8]> = 
+	include!(concat!(env!("OUT_DIR"), "/organya/wavetable"));
 
 pub const WAVE_LENGTH: usize = 0x100;
 
@@ -93,6 +94,7 @@ impl<'a> Octave<'a> {
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 #[repr(u8)]
+#[allow(dead_code)]
 pub enum Class {
 	C  = 0,
 	CS = 1,
