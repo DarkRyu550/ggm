@@ -481,8 +481,8 @@ impl Player {
 		
 			/* Fill the slice with our generated sound. */
 			let cbeat = self.cbeat;
-			let melodic = &mut self.melodic[0..0];
-			let percuss = &mut self.percuss[3..4];
+			let melodic = &mut self.melodic[..];
+			let percuss = &mut self.percuss[..];
 			for i in melodic.iter_mut() { melodic_gen(slice, cbeat + beat, i); } 
 			for i in percuss.iter_mut() { percuss_gen(slice, cbeat + beat, i); } 
 
