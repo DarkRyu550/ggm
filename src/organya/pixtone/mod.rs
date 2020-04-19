@@ -17,7 +17,7 @@ const WAVEFORMS: [[i8; 256]; 6] =
 pub const EFFECTS: Option<&'static [(usize, &'static [u8])]> = 
 	include!(concat!(env!("OUT_DIR"), "/organya/pixtone_effects"));
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 #[repr(u8)]
 #[allow(dead_code)]
 enum Waveform {
@@ -50,7 +50,7 @@ impl TryFrom<u8> for Waveform {
 	}
 }
 
-#[derive(Copy, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
 struct WaveDescriptor {
 	/** Number of the base wave in PixTone. */
 	waveform: Waveform,
@@ -58,10 +58,11 @@ struct WaveDescriptor {
 	offset: u8,
 	/** Frequency at which this wave will be playing, in hertz. */
 	freq: f64,
-	/** Top as in maximum value? */
-	max: u8
+	/** Volume of the wave in the range from 0 to 64 */
+	volume: u8
 }
 
+#[derive(Debug, Clone, Eq, PartialEq)]
 struct Envelope {
 	/** Volume at the beggining of the envelope. */
 	initial: u8,
@@ -89,6 +90,7 @@ impl Envelope {
 	}
 }
 
+#[derive(Debug, Clone)]
 struct Channel {
 	/** Length of the target sample, in samples. */
 	len: usize,
@@ -107,7 +109,7 @@ impl Channel {
 			data: self,
 			amplpos: f64::from(self.ampl.offset),
 			freqpos: f64::from(self.freq.offset),
-			wavepos: 0.0,
+			wavepos: f64::from(self.base.offset),
 			sample:  0
 		};
 		self.envelope.over(channel, self.len)
@@ -135,6 +137,7 @@ impl Synth {
 		let file = file::parse_pxt(buf).map_err(|w| Error::Parse(w))?;
 
 		let channels = file.iter()
+			.inspect(|chan| debug!("Loaded channel {}", chan.strdump()))
 			.filter(|chan| chan.r#use.unwrap() != 0)
 			.map(|chan| Ok(Channel {
 				len:  chan.size.unwrap(),
@@ -142,21 +145,21 @@ impl Synth {
 					waveform: Waveform::try_from(chan.main_model.unwrap())
 						.map_err(|w| Error::InvalidWaveform(w))?,
 					freq:   chan.main_freq.unwrap(),
-					max:    chan.main_top.unwrap(),
+					volume: chan.main_top.unwrap(),
 					offset: chan.main_offset.unwrap(),
 				},
 				ampl: WaveDescriptor {
 					waveform: Waveform::try_from(chan.volume_model.unwrap())
 						.map_err(|w| Error::InvalidWaveform(w))?,
 					freq:   chan.volume_freq.unwrap(),
-					max:    chan.volume_top.unwrap(),
+					volume: chan.volume_top.unwrap(),
 					offset: chan.volume_offset.unwrap(),
 				},
 				freq: WaveDescriptor {
 					waveform: Waveform::try_from(chan.pitch_model.unwrap())
 						.map_err(|w| Error::InvalidWaveform(w))?,
 					freq:   chan.pitch_freq.unwrap(),
-					max:    chan.pitch_top.unwrap(),
+					volume: chan.pitch_top.unwrap(),
 					offset: chan.pitch_offset.unwrap(),
 				},
 				envelope: Envelope {
@@ -217,33 +220,60 @@ impl<'a> Iterator for ChannelSynth<'a> {
 	fn next(&mut self) -> Option<Self::Item> {
 		if self.data.len - self.sample == 0 { return None }
 
-		/* Synthesize the next sample in the current channel. */
+		/* Get parameters for every wave. */
 		let amplspd = self.data.ampl.freq / SAMPLE_RATE as f64;
 		let freqspd = self.data.freq.freq / SAMPLE_RATE as f64;
 		let wavespd = self.data.base.freq / SAMPLE_RATE as f64;
 
 		let ampl = self.data.ampl.waveform.data();
 		let freq = self.data.freq.waveform.data();
+		let base = self.data.base.waveform.data();
+
+		let amplspd = amplspd * ampl.len() as f64;
+		let freqspd = freqspd * freq.len() as f64;
+		let wavespd = wavespd * base.len() as f64;
 
 		let ampl = f64::from(ampl[self.amplpos as usize % ampl.len()]);
 		let freq = f64::from(freq[self.freqpos as usize % freq.len()]);
+		let base = f64::from(base[self.wavepos as usize % base.len()]);
 
-		let ampl = ampl / f64::from(i8::MAX) * f64::from(self.data.ampl.max);
-		let freq = freq / f64::from(i8::MAX);
-		let freq = freq * (f64::from(self.data.freq.max) / f64::from(u8::MAX));
-		let freq = 1.0 + freq;
+		let ampl = ampl * f64::from(self.data.ampl.volume) / 64.0;
+		let freq = freq * f64::from(self.data.freq.volume) / 64.0;
+		let base = base * f64::from(self.data.base.volume) / 64.0;
 
+		/* Compute the amplitude modulation such that the sound is muted when
+		 * the amplitude signal is less or equal to -64. */
+		let ampl = if self.data.ampl.waveform == Waveform::Sine {
+			if ampl > 127.0 || ampl < -127.0 {
+				if ampl > 127.0 {
+					-256.0 + ampl
+				} else {
+					 256.0 + ampl
+				}
+			} else {
+				ampl
+			}
+		} else { ampl };
+		let ampl = if ampl + 64.0 < 0.0 { 0.0 } else { ampl + 64.0 };
+
+		/* Compute the frequency modulation such that the frequency is halved
+		 * for every 64 points below zero and doubled for every 32 above. */
+		let freq = if freq < 0.0 {
+			f64::powf(2.0, freq / 64.0)
+		} else {
+			f64::powf(2.0, freq / 32.0)
+		};
+
+		/* Modulate */
+		let modt = (base * ampl) / 64.0;
+		
 		self.amplpos += amplspd;
 		self.freqpos += freqspd;
+		self.wavepos += wavespd * freq;
 
-		let sample = self.data.base.waveform.data();
-		let sample = f64::from(sample[self.wavepos as usize % sample.len()]);
-		let sample = sample + ampl;
-
-		self.wavepos += wavespd;
 		self.sample += 1;
 
-		Some(sample as i8)
+		Some(modt as i8)
 	}
 }
 
@@ -261,7 +291,7 @@ impl<'a, S: Iterator<Item = i8>> Iterator for EnvelopeOver<'a, S> {
 	type Item = i8;
 	fn next(&mut self) -> Option<Self::Item> {
 		let position = self.sample as f64 / self.length as f64;
-		
+
 		let attckpos = f64::from(self.envelope.attack.0)  / 256.0;
 		let sustnpos = f64::from(self.envelope.sustain.0) / 256.0;
 		let decaypos = f64::from(self.envelope.decay.0)   / 256.0;
@@ -286,7 +316,9 @@ impl<'a, S: Iterator<Item = i8>> Iterator for EnvelopeOver<'a, S> {
 		let iy = ay + (by - ay) * ix;
 
 		/* Multiply the value by the loudness we've just calculated. */
-		let sample = f64::from(self.samples.next()?) * iy;
+		let sample = f64::from(self.samples.next()?) * iy * 2.0;
+		
+		self.sample += 1;
 		Some(sample as i8)
 	}
 }

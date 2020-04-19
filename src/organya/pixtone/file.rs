@@ -210,7 +210,7 @@ impl PxtChannel {
 		&& self.cx.is_some()
 		&& self.cy.is_some()
 	}
-	fn strdump(&self) -> String {
+	pub fn strdump(&self) -> String {
 		if !self.is_complete() { panic!("Called strdump() on an incomplete parse"); }
 		format!("{},{},\
 			{},{:.2},{},{},\

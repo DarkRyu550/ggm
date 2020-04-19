@@ -117,7 +117,10 @@ struct DrumMapper<'a> {
 impl<'a> DrumMapper<'a> {
 	fn new(drums: &'a HashMap<usize, Vec<i8>>) -> Self {
 		/* This is the default mapping for the drum instruments in Cave Story. */
-		let map = [0x96, 0x00, 0x97, 0x00, 0x9a, 0x98, 0x99, 0x00, 0x9b, 0, 0, 0];
+		let map = [
+			0x96, 0x00, 0x97, 0x00, 0x9a, 0x98, 
+			0x99, 0x00, 0x9b, 0x00, 0x00, 0x00
+		];
 		DrumMapper { map, drums }
 	}
 	/** How many drum samples are mapped? */
@@ -240,12 +243,13 @@ impl Player {
 			note_events: notes 
 		} = organya;
 
-		let melodic = instrs[..8].iter()
-			.zip(notes.iter())
+		const PERCUSSION_START: usize = 8;
+		let melodic = instrs[..PERCUSSION_START].iter()
+			.zip(notes[..PERCUSSION_START].iter())
 			.map(|(instr, notes)| Melodic::new(*instr, notes.to_vec()))
 			.collect::<Vec<_>>();
-		let percuss = instrs[8..].iter()
-			.zip(notes.iter())
+		let percuss = instrs[PERCUSSION_START..].iter()
+			.zip(notes[PERCUSSION_START..].iter())
 			.map(|(instr, notes)| Percussion::new(*instr, notes.to_vec()))
 			.collect::<Vec<_>>();
 		if melodic.len() + percuss.len() != 16 { 
@@ -363,7 +367,7 @@ impl Player {
 					 * that lands somewhere between G#2 and A2, since that is
 					 * where the note frequency (~220.50Hz) aligns with the
 					 * target of 22050Hz of the PixTone synthesizer. */
-					let pfreq = f64::from(event.value) / 32.5 * 22050.0;
+					let pfreq = f64::from(event.value) / 32.5 * 22050.0 * 2.0;
 					track.wavepos  = 0.0;
 					track.wavespd  = pfreq / srate as f64;
 					trace!("Playing percussion at freq {} with {} points per \
@@ -486,9 +490,9 @@ impl Player {
 			for i in melodic.iter_mut() { melodic_gen(slice, cbeat + beat, i); } 
 			for i in percuss.iter_mut() { percuss_gen(slice, cbeat + beat, i); } 
 
-			/* Normalize. */
+			/* Normalize?. */
 			for sample in slice.iter_mut() { 
-				*sample /= (melodic.len() + percuss.len()) as f64
+				*sample /= 2.0;
 			}
 		}
 		self.cbeat += beats;
