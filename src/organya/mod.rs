@@ -490,9 +490,9 @@ impl Player {
 			for i in melodic.iter_mut() { melodic_gen(slice, cbeat + beat, i); } 
 			for i in percuss.iter_mut() { percuss_gen(slice, cbeat + beat, i); } 
 
-			/* Normalize?. */
+			/* Normalize. */
 			for sample in slice.iter_mut() { 
-				*sample /= 2.0;
+				*sample /= (melodic.len() + percuss.len()) as f64
 			}
 		}
 		self.cbeat += beats;
