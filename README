@@ -1,0 +1,63 @@
+##########################
+### General Game Music ###
+##########################
+
+A library for reading and synthesizing (or just simply weaving) music ripped
+straight out of games, in their native format, and producing form them raw PCM
+audio that would be the closest equivalent to the original target audio format.
+
+##################
+# Feature Matrix #
+##################
+
+Currently, this library supprts the following formats:
+
+|---------|--------------------------------|-------------------|---------------|
+| Format  | From                           | Support Proggress | Cargo Feature |
+|---------|--------------------------------|-------------------|---------------|
+| Organya | Cave Story (洞窟物語)          | 100% - Public     | organya       |
+| AST     | Some Nintendo GCN or Wii games | ~75% - Private    | N/A           |
+| GSF     | GameBoy Advance ROM rips       | ~25% - Planned    | N/A           |
+| USF     | Nintendo 64 ROM rips           |   0% - Planned    | N/A           |
+| PSF     | PlayStation ROM rips           |   0% - Planned    | N/A           |
+|---------|--------------------------------|-------------------|---------------|
+
+Some development notes for the formats:
+
+|---------|--------------------------------------------------------------------|
+| Format  | Notes                                                              |
+|---------|--------------------------------------------------------------------|
+| GSF     | The implementation of an ARMv4 interpreter for the ROM code is     |
+|         | under way, currently supporting data processing and on its way to  |
+|         | support the multiplication extensions.                             |
+|---------|--------------------------------------------------------------------|
+
+#############
+# Licensing #
+#############
+
+The source code files in this project are under the BSD 3-clause license.
+However, as might be predictable for a library whose goal is to play ripped
+audio, there are some slight caveats and notable exceptions. Listed below:
+
+|---------|--------------------------------------------------------------------|
+| Format  | Caveat                                                             |
+|---------|--------------------------------------------------------------------|
+| Organya | Due to the format's reliance on pre-specified instrument           |
+|         | definitions, for the synths to sound true to how they would sound  |
+|         | in-game, we need to use both the instrument waveform bank and the  |
+|         | percussion descriptors from the original game or the NX Engine,    |
+|         | which are freeware and GPLv3, respectively.                        |
+|         |                                                                    |
+|         | For that reason, bundling files from these sources into the binary |
+|         | might result in some wacky licensing effects. So, you may wish to  |
+|         | disable the bundling of those assets by enabling the `no-organya-  |
+|         | builtin-wavetable` and `no-organya-builtin-pixtone` build flags.   |
+|         |                                                                    |
+|         | NOTE: For now these files are distributed along with the build     |
+|         | scripts in this repository! That is a terrible decision that will  |
+|         | be fixed once I figure out how to properly and reliably extract    |
+|         | these assets from the original game executable. If you have any    |
+|         | complaints about that please contact me.                           |
+|---------|--------------------------------------------------------------------|
+
