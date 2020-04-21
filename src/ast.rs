@@ -1,132 +1,182 @@
 
-#[derive(Debug)]
-pub enum AstError {
-	InvalidHeader,
-	InvalidFragmentHeader,
-	IoError(std::io::Error)
-}
+const HEADER_LENGTH: usize = 64;
+struct Header([u8; HEADER_LENGTH]);
 
-use std::io::Cursor;
-pub struct Ast<S> {
-	source:		S,
-	length:		u32,
-	channels:	u16,
-	samplerate:	u32,
-	samples:	u32,
-	loopstart:	u32,
-	fragment:	Cursor<Vec<u8>>
-}
-use std::io::Read;
-impl<S: Read> Ast<S> {
-	pub fn new(mut source: S) -> Result<Ast<S>, AstError> {
-		let map_io = |what| AstError::IoError(what);
-
-		/* Constant expected pieces of the header. */
-		const HEADER_LENGTH: usize = 64;
+use std::convert::TryInto;
+impl Header {
+	/** Check the header against the known constant bits. */
+	fn check(&self) -> bool {
 		const HEADER_CONSTS: &'static [(usize, &'static [u8])] = &[
 			(0x0000, &[0x53, 0x54, 0x52, 0x4d]),
-			/*(0x0008, &[0x00, 0x01, 0x00, 0x10]),*/
 			(0x000e, &[0xff, 0xff]),
 		];
 
-		let mut header = vec![0; HEADER_LENGTH];
-		source.read_exact(&mut header[..HEADER_LENGTH]).map_err(map_io)?;
-
 		/* Check the integrity of the header. */
-		for (offset, data) in HEADER_CONSTS {
-			let offset = *offset;
-			let frag = header.get(offset..offset + data.len())
-				.ok_or(AstError::InvalidHeader)?;
-			if &frag != data { return Err(AstError::InvalidHeader) }
-		}
-
-		/* Load some useful information from the header. */
-		use std::convert::TryInto;
-		let length      = u32::from_be_bytes(header[0x0004..0x0008].try_into().unwrap());
-		let channels    = u16::from_be_bytes(header[0x000c..0x000e].try_into().unwrap());
-		let samplerate  = u32::from_be_bytes(header[0x0010..0x0014].try_into().unwrap());
-		let samples     = u32::from_be_bytes(header[0x0014..0x0018].try_into().unwrap());
-		let loopstart   = u32::from_be_bytes(header[0x0018..0x001c].try_into().unwrap());
-
-		eprintln!("length:\t\t{}",		length);
-		eprintln!("channels:\t{}",		channels);
-		eprintln!("samplerate:\t{}",	samplerate);
-		eprintln!("samples:\t{}",		samples);
-		eprintln!("loopstart:\t{}",		loopstart);
-
-		Ok(Ast { 
-			source, 
-			length, 
-			channels, 
-			samplerate, 
-			samples, 
-			loopstart, 
-			fragment: Cursor::new(Vec::new()) 
-		})
+		HEADER_CONSTS.into_iter()
+			.find(|(offset, data)| {
+				let offset = *offset;
+				let frag = match self.0.get(offset..offset + data.len()) {
+					Some(frag) => frag,
+					None => return true
+				};
+				&frag != data
+			}).is_none()
 	}
+	/** Total size of all the BLCK chunks in bytes. */ 
+	fn length(&self) -> u32 { u32::from_be_bytes(self.0[0x0004..0x0008].try_into().unwrap()) }
+	/** Number of audio channels in the music file. */
+	fn chans(&self) -> u16 { u16::from_be_bytes(self.0[0x000c..0x000e].try_into().unwrap()) }
+	/** Number of audio samples to be played in a second */
+	fn srate(&self) -> u32 { u32::from_be_bytes(self.0[0x0010..0x0014].try_into().unwrap()) }
+	/** Total number of samples accross all BLCK chunks. */
+	fn smpls(&self) -> u32 { u32::from_be_bytes(self.0[0x0014..0x0018].try_into().unwrap()) }
+	/** The looping part of the song at this sample. */
+	fn lpbeg(&self) -> u32 { u32::from_be_bytes(self.0[0x0018..0x001c].try_into().unwrap()) }
+}
 
-	fn _pull_fragment(&mut self) -> Result<(), AstError> {
-		let map_io = |what| AstError::IoError(what);
-		
-		const HEADER_LENGTH: usize = 32;
+const BLCK_HEADER_LENGTH: usize = 32;
+struct BlckHeader([u8; BLCK_HEADER_LENGTH]);
+impl BlckHeader {
+	/** Check the header against the known constant bits. */
+	fn check(&self) -> bool {
 		const HEADER_CONSTS: &'static [(usize, &'static [u8])] = &[
 			(0x0000, &[0x42, 0x4C, 0x43, 0x4B]),
 		];
 
-		let mut header = vec![0; HEADER_LENGTH];
-		self.source.read_exact(&mut header[..HEADER_LENGTH]).map_err(map_io)?;
-
 		/* Check the integrity of the header. */
-		for (offset, data) in HEADER_CONSTS {
-			let offset = *offset;
-			let frag = header.get(offset..offset + data.len())
-				.ok_or(AstError::InvalidFragmentHeader)?;
-			if &frag != data { return Err(AstError::InvalidFragmentHeader) }
+		HEADER_CONSTS.into_iter()
+			.find(|(offset, data)| {
+				let offset = *offset;
+				let frag = match self.0.get(offset..offset + data.len()) {
+					Some(frag) => frag,
+					None => return true
+				};
+				&frag != data
+			}).is_none()
+	}
+	/** Size of each channel block in this block, in bytes? */
+	fn bsize(&self) -> u32 { u32::from_be_bytes(self.0[0x0004..0x0008].try_into().unwrap()) }
+}
+
+#[derive(Debug)]
+pub enum Error {
+	InvalidHeader,
+	InvalidFragmentHeader,
+	IoError(std::io::Error)
+}
+impl std::fmt::Display for Error {
+	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+		let message = match self { 
+			&Self::InvalidHeader => 
+				"The wavetable is invalid".to_owned(),
+			&Self::InvalidFragmentHeader => 
+				"Invalid fragment header".to_owned(),
+			&Self::IoError(ref what) =>
+				format!("I/O Error: {}", what)
+		};
+
+		write!(f, "{}", message)
+	}
+}
+
+use std::io::Cursor;
+pub struct Ast<S> {
+	source:  S,
+	header:  Header,
+	samples: Vec<i16>,
+	csample: usize,
+}
+use std::io::Read;
+impl<S: Read> Ast<S> {
+	pub fn new(mut source: S) -> Result<Ast<S>, Error> {
+		let map_io = |what| Error::IoError(what);
+
+		let mut header = Header([0; HEADER_LENGTH]);
+		source.read_exact(&mut header.0[..]).map_err(map_io)?;
+
+		debug!("length:     {}", header.length());
+		debug!("channels:   {}", header.chans());
+		debug!("samplerate: {}", header.srate());
+		debug!("samples:    {}", header.smpls());
+		debug!("loopstart:  {}", header.lpbeg());
+
+		Ok(Ast { 
+			source, 
+			header,
+			samples: Vec::new(),
+			csample: 0
+		})
+	}
+
+	fn _pull_fragment(&mut self) -> Result<(), Error> {
+		let map_io = |what| Error::IoError(what);
+	
+		let mut block = BlckHeader(Default::default());
+		self.source.read_exact(&mut block.0[..]).map_err(map_io)?;
+
+		/* Reserve space in the buffer to hold all the song data. */
+		use std::mem::size_of;
+
+		let scount = block.bsize() as usize;
+		self.samples.reserve(scount);
+
+		/* Load the unwoven sample data into a buffer. */
+		let mut tmp = Vec::with_capacity(scount);
+		for sample in 0..scount {
+			let mut data: [u8; size_of::<i16>()] = Default::default();
+			self.source.read_exact(&mut data[..]).map_err(map_io)?;
+
+			tmp.push(i16::from_be_bytes(data));
 		}
+		trace!("Loaded {} more samples", scount);
 
-		/* Load some useful information from the header. */
-		use std::convert::TryInto;
-		let size = u32::from_be_bytes(header[0x0004..0x0008].try_into().unwrap());
+		/* Weave them in. */
+		let scount = scount / self.header.chans() as usize;
+		let chans  = self.header.chans() as usize;
 
-		/* Load the data for the next fragment in. */
-		let channels = self.channels as usize;
-		let length   = size as usize;
-
-		let mut vec = vec![0; channels * length + 1];
-		for i in 0..1 {
-			let mut contents = vec![0; length];
-			self.source.read_exact(&mut contents[..length]).map_err(map_io)?;
-
-			for (j, sample) in (0..).into_iter().zip(contents.chunks(2)) {
-				vec[(channels * j + i) * 2 + 0] = sample[0];
-				vec[(channels * j + i) * 2 + 1] = sample[1];
+		for sample in 0..scount {
+			for chan in 0..chans {
+				//trace!("Weaving sample {}, channel {}", sample, chan);
+				self.samples.push(tmp[scount * chan + sample]);
 			}
 		}
 		
-		self.fragment = Cursor::new(vec);
 		Ok(())
 	}
 }
-impl<S: Read> Read for Ast<S> {
-	fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-		let map_ast = |what| match what {
-			AstError::IoError(what) => what,
-			what @ _ => std::io::Error::new(
-				std::io::ErrorKind::Other,
-				format!("{:?}", what))
-		};
 
-		/* Figure out how much room we still have in the currenf fragment. */
-		use std::io::{Seek, SeekFrom};
-		let offset = self.fragment.seek(SeekFrom::Current(0))? as usize;
-		let length = self.fragment.get_ref().len();
-		if offset == length || offset > length {
-			/* We need to load in another fragment. */
-			self._pull_fragment().map_err(map_ast)?;
-		}
+use crate::Song;
+use crate::RemainingLength;
+impl<S: Read> Song for Ast<S> {
+	type Sample = i16;
+	type Error  = Error; 
 
-		/* Read from the current fragment into the buffer. */
-		self.fragment.read(buf)
+	fn blocksize(&self) -> Option<usize> { 
+		Some(self.channels())
+	}
+	fn remaining(&self) -> RemainingLength { 
+		RemainingLength::Infinite
+	}
+	fn channels(&self) -> usize {
+		self.header.chans() as usize
+	}
+	fn samplerate(&self) -> usize {
+		self.header.srate() as usize
+	}
+	fn generate(&mut self, buf: &mut [Self::Sample]) -> Result<usize, Error> {
+		/* If we don't have any more samples in the buffer, load more in. */
+		if self.samples[self.csample..].len() == 0 { self._pull_fragment()?; }
+
+		/* Just simply copy the samples over. */
+		let length = buf.len();
+		let target = &mut buf[..length - length % self.channels()];
+		let source = &mut self.samples[self.csample..];
+
+		let copies = usize::min(target.len(), source.len());
+		for i in 0..copies{ target[i] = source[i] }
+
+		self.csample += copies;
+		Ok(copies)
 	}
 }
 

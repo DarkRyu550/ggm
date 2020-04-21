@@ -8,11 +8,23 @@ build   = "build/mod.rs"
 [dependencies]
 log	= "0.4.8"
 
-[features]
-default = ["all"]
+[dependencies.serde]
+version  = "1.0"
+features = ["derive"]
+optional = true
 
-# Enable all features.
-all = ["organya", "usf", "gsf", "psf"]
+[features]
+default = ["all-formats"]
+
+# Derive Serialize and Deserialize for GGM structures.
+use-serde = ["serde"]
+
+#############################
+## Format support features ##
+#############################
+
+# Enable all formats.
+all-formats = ["organya", "usf", "gsf", "psf", "ast"]
 # Support for the Organya files used in Cave Story.
 organya = []
 # Whether the wave table at "build/organya/wavetable.dat" will be built into
@@ -27,4 +39,6 @@ usf = []
 gsf = []
 # Support for the Playstation Sound Format (PlayStation).
 psf = []
-
+# Support for the AST format found in some first-party Nintendo Gamecube and
+# Wii games, like Super Mario Galaxy and The Legend of Zelda: Twilight Princess.
+ast = []

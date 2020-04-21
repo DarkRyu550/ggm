@@ -16,7 +16,7 @@ Currently, this library supprts the following formats:
 | Format  | From                           | Support Proggress | Cargo Feature |
 |---------|--------------------------------|-------------------|---------------|
 | Organya | Cave Story (洞窟物語)          | 100% - Public     | organya       |
-| AST     | Some Nintendo GCN or Wii games | ~75% - Private    | N/A           |
+| AST     | Some Nintendo GCN or Wii games |  85% - Public     | ast           |
 | GSF     | GameBoy Advance ROM rips       | ~25% - Planned    | N/A           |
 | USF     | Nintendo 64 ROM rips           |   0% - Planned    | N/A           |
 | PSF     | PlayStation ROM rips           |   0% - Planned    | N/A           |
@@ -30,6 +30,9 @@ Some development notes for the formats:
 | GSF     | The implementation of an ARMv4 interpreter for the ROM code is     |
 |         | under way, currently supporting data processing and on its way to  |
 |         | support the multiplication extensions.                             |
+| AST     | Apparently, the format differs substantially between the games it  |
+|         | gets used in. For now, the AST support is limited to mostly just   |
+|         | Super Mario Galaxy.                                                |
 |---------|--------------------------------------------------------------------|
 
 #############

@@ -121,6 +121,18 @@ pub enum Error {
 	Parse(ParseError),
 	InvalidWaveform(u8),
 }
+impl std::fmt::Display for Error {
+	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+		let message = match self { 
+			&Self::InvalidWaveform(ref index) => 
+				format!("Sample requested invalid waveform {}", index),
+			&Self::Parse(ref what) =>
+				format!("{}", what)
+		};
+
+		write!(f, "{}", message)
+	}
+}
 
 use std::io::Read;
 pub struct Synth {
@@ -316,7 +328,7 @@ impl<'a, S: Iterator<Item = i8>> Iterator for EnvelopeOver<'a, S> {
 		let iy = ay + (by - ay) * ix;
 
 		/* Multiply the value by the loudness we've just calculated. */
-		let sample = f64::from(self.samples.next()?) * iy * 2.0;
+		let sample = f64::from(self.samples.next()?) * iy;
 		
 		self.sample += 1;
 		Some(sample as i8)

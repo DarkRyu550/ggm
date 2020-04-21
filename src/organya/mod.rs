@@ -3,6 +3,8 @@ mod wave;
 mod pixtone;
 
 use std::collections::VecDeque;
+
+/** Playback variables for melodic instruments. */
 #[derive(Debug)]
 struct Melodic {
 	instr: file::Instrument,
@@ -33,6 +35,7 @@ impl Melodic {
 	}
 }
 
+/** Playback variables for percussion instruments. */
 #[derive(Debug)]
 struct Percussion {
 	instr: file::Instrument,
@@ -61,6 +64,9 @@ impl Percussion {
 	}
 }
 
+/** Generic type encompassing both instrument types for functions that can
+ * accept either melodical or percussion instruments. We also provide some
+ * convenience methods for values that are shared by both tyoes. */
 #[derive(Debug)]
 enum Track<'a> {
 	Melodic(&'a mut Melodic),
@@ -105,6 +111,22 @@ pub enum Error {
 	MissingPixtone,
 	InvalidPixtone(usize, pixtone::Error),
 	IoError(std::io::Error)
+}
+impl std::fmt::Display for Error {
+	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+		let message = match self { 
+			&Self::MissingWavetable => "No wavetable".to_owned(),
+			&Self::InvalidWavetable => "The wavetable is invalid".to_owned(),
+			&Self::InvalidTracks    => "The track data is invalid".to_owned(),
+			&Self::MissingPixtone   => "No drum data".to_owned(),
+			&Self::InvalidPixtone(ref index, ref what) => 
+				format!("Invalid PixTone 0x{:x}: {}", index, what),
+			&Self::IoError(ref what) =>
+				format!("I/O Error: {}", what)
+		};
+
+		write!(f, "{}", message)
+	}
 }
 
 const DRUM_SAMPLES: usize = 12;
@@ -303,11 +325,7 @@ impl Player {
 		})
 	}
 
-	pub fn samples_per_beat_channel(&self) -> usize {
-		self.sbeat
-	}
-
-	pub fn synth(&mut self, buff: &mut [f64]) -> usize {
+	fn synth(&mut self, buff: &mut [f64]) -> usize {
 		use wave::Wavetable;
 		let table = Wavetable(&self.wavetbl);
 		let drums = DrumMapper::new(&self.drums);
@@ -367,7 +385,7 @@ impl Player {
 					 * that lands somewhere between G#2 and A2, since that is
 					 * where the note frequency (~220.50Hz) aligns with the
 					 * target of 22050Hz of the PixTone synthesizer. */
-					let pfreq = f64::from(event.value) / 32.5 * 22050.0 * 2.0;
+					let pfreq = f64::from(event.value) / 32.5 * 44100.0;
 					track.wavepos  = 0.0;
 					track.wavespd  = pfreq / srate as f64;
 					trace!("Playing percussion at freq {} with {} points per \
@@ -490,14 +508,43 @@ impl Player {
 			for i in melodic.iter_mut() { melodic_gen(slice, cbeat + beat, i); } 
 			for i in percuss.iter_mut() { percuss_gen(slice, cbeat + beat, i); } 
 
-			/* Normalize. */
 			for sample in slice.iter_mut() { 
-				*sample /= (melodic.len() + percuss.len()) as f64
+				*sample = if *sample > 1.0 { 
+					trace!("Clipping audio sample from {:.02} to 1.0", sample);
+					1.0 
+				} else if *sample < -1.0 { 
+					trace!("Clipping audio sample from {:.02} to -1.0", sample);
+					-1.0 
+				} else { *sample };
 			}
 		}
 		self.cbeat += beats;
 
 		beats * self.sbeat * 2
+	}
+}
+
+use crate::Song;
+use crate::RemainingLength;
+
+impl Song for Player {
+	type Sample = f64;
+	type Error  = !;
+
+	fn blocksize(&self) -> Option<usize> {
+		Some(self.sbeat * 2)
+	}
+	fn remaining(&self) -> RemainingLength {
+		RemainingLength::Infinite
+	}
+	fn channels(&self) -> usize { 
+		2 
+	}
+	fn samplerate(&self) -> usize {
+		self.srate
+	}
+	fn generate(&mut self, buf: &mut [Self::Sample]) -> Result<usize, !> {
+		Ok(self.synth(buf))
 	}
 }
 
