@@ -85,12 +85,6 @@ impl<'a> Track<'a> {
 			&mut Self::Percussion(ref mut a) => &mut a.panning,
 		}
 	}
-	fn instr(&self) -> &file::Instrument {
-		match self {
-			&Self::Melodic(ref a)    => &a.instr,
-			&Self::Percussion(ref a) => &a.instr,
-		}
-	}
 }
 impl<'a> From<&'a mut Melodic> for Track<'a> {
 	fn from(mel: &'a mut Melodic) -> Self {
@@ -105,6 +99,7 @@ impl<'a> From<&'a mut Percussion> for Track<'a> {
 
 #[derive(Debug)]
 pub enum Error {
+	InvalidOrganya,
 	MissingWavetable,
 	InvalidWavetable,
 	InvalidTracks,
@@ -115,6 +110,7 @@ pub enum Error {
 impl std::fmt::Display for Error {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
 		let message = match self { 
+			&Self::InvalidOrganya	=> "Not valid Organya".to_owned(),
 			&Self::MissingWavetable => "No wavetable".to_owned(),
 			&Self::InvalidWavetable => "The wavetable is invalid".to_owned(),
 			&Self::InvalidTracks    => "The track data is invalid".to_owned(),
@@ -155,8 +151,9 @@ impl<'a> DrumMapper<'a> {
 	}
 	/** Get the drum sample mapped to the given index mod length. */
 	fn mget(&self, index: usize) -> Option<&[i8]> {
-		self.drums.get(&self.map[index % self.len()])
-			.map(|vec| &vec[..])
+		self.get(index % self.len())
+		//self.drums.get(&self.map[index % self.len()])
+		//	.map(|vec| &vec[..])
 	}
 }
 
@@ -264,6 +261,10 @@ impl Player {
 			instruments: instrs,
 			note_events: notes 
 		} = organya;
+
+		if let file::Version::Unknown = header.version() {
+			return Err(Error::InvalidOrganya)
+		}
 
 		const PERCUSSION_START: usize = 8;
 		let melodic = instrs[..PERCUSSION_START].iter()

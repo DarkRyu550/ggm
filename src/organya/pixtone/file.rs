@@ -113,7 +113,7 @@ pub fn parse_pxt<B: BufRead>(mut r: B) -> Result<[PxtChannel; CHANNELS], Error> 
 			"by"			=> { try_none(chan.by.replace(parse_u8()?), dupeerror)?; },
 			"cx"			=> { try_none(chan.cx.replace(parse_u8()?), dupeerror)?; },
 			"cy"			=> { try_none(chan.cy.replace(parse_u8()?), dupeerror)?; },
-			l @ _ => return Err(Error::IllegalIdentifier {
+			_ => return Err(Error::IllegalIdentifier {
 				line:    number,
 				column:  0,
 				got:     key.to_owned(),

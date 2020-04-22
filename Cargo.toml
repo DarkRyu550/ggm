@@ -14,7 +14,7 @@ features = ["derive"]
 optional = true
 
 [features]
-default = ["all-formats"]
+default = ["organya", "ast"]
 
 # Derive Serialize and Deserialize for GGM structures.
 use-serde = ["serde"]

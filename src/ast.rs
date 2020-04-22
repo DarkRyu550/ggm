@@ -68,7 +68,7 @@ impl std::fmt::Display for Error {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
 		let message = match self { 
 			&Self::InvalidHeader => 
-				"The wavetable is invalid".to_owned(),
+				"Invalid header".to_owned(),
 			&Self::InvalidFragmentHeader => 
 				"Invalid fragment header".to_owned(),
 			&Self::IoError(ref what) =>
@@ -79,7 +79,6 @@ impl std::fmt::Display for Error {
 	}
 }
 
-use std::io::Cursor;
 pub struct Ast<S> {
 	source:  S,
 	header:  Header,
@@ -93,6 +92,7 @@ impl<S: Read> Ast<S> {
 
 		let mut header = Header([0; HEADER_LENGTH]);
 		source.read_exact(&mut header.0[..]).map_err(map_io)?;
+		if !header.check() { return Err(Error::InvalidHeader) }
 
 		debug!("length:     {}", header.length());
 		debug!("channels:   {}", header.chans());
@@ -113,6 +113,7 @@ impl<S: Read> Ast<S> {
 	
 		let mut block = BlckHeader(Default::default());
 		self.source.read_exact(&mut block.0[..]).map_err(map_io)?;
+		if !block.check() { return Err(Error::InvalidFragmentHeader) }
 
 		/* Reserve space in the buffer to hold all the song data. */
 		use std::mem::size_of;
@@ -122,7 +123,7 @@ impl<S: Read> Ast<S> {
 
 		/* Load the unwoven sample data into a buffer. */
 		let mut tmp = Vec::with_capacity(scount);
-		for sample in 0..scount {
+		for _ in 0..scount {
 			let mut data: [u8; size_of::<i16>()] = Default::default();
 			self.source.read_exact(&mut data[..]).map_err(map_io)?;
 
@@ -136,7 +137,6 @@ impl<S: Read> Ast<S> {
 
 		for sample in 0..scount {
 			for chan in 0..chans {
-				//trace!("Weaving sample {}, channel {}", sample, chan);
 				self.samples.push(tmp[scount * chan + sample]);
 			}
 		}
@@ -152,7 +152,7 @@ impl<S: Read> Song for Ast<S> {
 	type Error  = Error; 
 
 	fn blocksize(&self) -> Option<usize> { 
-		Some(self.channels())
+		None
 	}
 	fn remaining(&self) -> RemainingLength { 
 		RemainingLength::Infinite
